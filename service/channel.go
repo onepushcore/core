@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"github.com/onepushcore/core"
 	"github.com/redis/go-redis/v9"
 	"log/slog"
@@ -17,7 +16,7 @@ func NewChannelConfigService(rds redis.Cmdable) *ChannelConfigService {
 		bucket: &BucketService[core.ChannelConfig]{
 			Rds: rds,
 			NewBucket: func(owner string) string {
-				return fmt.Sprintf("onepush::core::channels::%s", owner)
+				return "onepush::core::channels::" + owner
 			},
 			NewValue: func() core.ChannelConfig {
 				return core.ChannelConfig{}
@@ -60,4 +59,13 @@ func (s *ChannelConfigService) Exists(ctx context.Context, appKey string, channe
 		return false
 	}
 	return exists
+}
+
+func (s *ChannelConfigService) Remove(ctx context.Context, appKey string, channelType core.ChannelType) error {
+	err := s.bucket.Remove(ctx, appKey, string(channelType))
+	if err != nil {
+		slog.Error("redis remove channel config error.", "appKey", appKey, "channelType", channelType, "error", err)
+		return err
+	}
+	return nil
 }

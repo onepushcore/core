@@ -63,6 +63,15 @@ func (s *FeatureConfigService) Exists(ctx context.Context, appKey string, channe
 	return exists
 }
 
+func (s *FeatureConfigService) Remove(ctx context.Context, appKey string, channelType core.ChannelType, featureType core.FeatureType) error {
+	err := s.bucket.Remove(ctx, s.newOwnerKey(appKey, channelType), string(featureType))
+	if err != nil {
+		slog.Error("redis remove feature config error.", "appKey", appKey, "channelType", channelType, "featureType", featureType, "error", err)
+		return err
+	}
+	return nil
+}
+
 func (s *FeatureConfigService) newOwnerKey(appKey string, channelType core.ChannelType) string {
 	return appKey + "#" + string(channelType)
 }

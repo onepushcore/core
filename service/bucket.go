@@ -72,3 +72,12 @@ func (s *BucketService[T]) Exists(ctx context.Context, owner, key string) (bool,
 	}
 	return resp.Val(), nil
 }
+
+func (s *BucketService[T]) Remove(ctx context.Context, owner, key string) error {
+	bucket := s.NewBucket(owner)
+	resp := s.Rds.HDel(ctx, bucket, key)
+	if resp.Err() != nil {
+		return fmt.Errorf("redis bucket remove error. %w", resp.Err())
+	}
+	return nil
+}
