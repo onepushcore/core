@@ -98,3 +98,12 @@ func (s *AppConfigService) Remove(ctx context.Context, account, appKey string) e
 	}
 	return nil
 }
+
+func (s *AppConfigService) Owner(ctx context.Context, appKey string) (string, error) {
+	resp := s.bucket.Rds.HGet(ctx, BucketKeyOwnedApps, appKey)
+	if resp.Err() != nil {
+		slog.Error("redis get app owner error.", "appKey", appKey, "error", resp.Err())
+		return "", resp.Err()
+	}
+	return resp.Val(), nil
+}
