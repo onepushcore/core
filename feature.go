@@ -2,13 +2,10 @@ package core
 
 type FeatureType string
 
-const (
-	ChannelFeatureTypeTrimSpace FeatureType = "feat:trim-space"
-)
-
-type Feature struct {
-	Type    FeatureType    `json:"type"`
-	Name    string         `json:"name"`    // 特性名称
-	Enabled bool           `json:"enabled"` // 是否启用特性
-	Options map[string]any `json:"options"` // 配置参数
+type FeatureConfig struct {
+	AppKey  string         `json:"app_key"`      // 应用标识
+	Channel ChannelType    `json:"channel_type"` // 通道类型
+	Type    FeatureType    `json:"type"`         // 特性类型
+	Enabled bool           `json:"enabled"`      // 是否启用
+	Options map[string]any `json:"options"`      // 配置参数
 }

@@ -3,89 +3,61 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/bytedance/sonic"
 	"github.com/onepushcore/core"
 	"github.com/redis/go-redis/v9"
 	"log/slog"
 )
 
 type ChannelConfigService struct {
-	rds redis.Cmdable
+	bucket *BucketService[core.ChannelConfig]
 }
 
 func NewChannelConfigService(rds redis.Cmdable) *ChannelConfigService {
 	return &ChannelConfigService{
-		rds: rds,
+		bucket: &BucketService[core.ChannelConfig]{
+			Rds: rds,
+			NewBucket: func(owner string) string {
+				return fmt.Sprintf("onepush::core::channels::%s", owner)
+			},
+			NewValue: func() core.ChannelConfig {
+				return core.ChannelConfig{}
+			},
+		},
 	}
 }
 
-func (s *ChannelConfigService) List(ctx context.Context, appKey string) (map[core.ChannelType]core.ChannelConfig, error) {
-	bucket := s.newBucket(appKey)
-	resp := s.rds.HGetAll(ctx, bucket)
-	if err := resp.Err(); err != nil {
-		slog.Error("redis range channel config error.", "appKey", appKey, "error", err)
-		return nil, fmt.Errorf("range channel config. %w", err)
+func (s *ChannelConfigService) List(ctx context.Context, appKey string) (map[string]core.ChannelConfig, error) {
+	dmap, err := s.bucket.List(ctx, appKey)
+	if err != nil {
+		slog.Error("redis list channel config error.", "appKey", appKey, "error", err)
+		return nil, err
 	}
-	output := make(map[core.ChannelType]core.ChannelConfig, len(resp.Val()))
-	for typ, val := range resp.Val() {
-		var config core.ChannelConfig
-		if err := sonic.Unmarshal([]byte(val), &config); err != nil {
-			slog.Error("unmarshal channel config error.", "appKey", appKey, "config", val, "error", err)
-			return nil, fmt.Errorf("unmarshal channel config. %w", err)
-		}
-		output[core.ChannelType(typ)] = config
-	}
-	return output, nil
+	return dmap, nil
 }
 
 func (s *ChannelConfigService) Store(ctx context.Context, config core.ChannelConfig) error {
-	appKey, channelType := config.AppKey, config.Type
-	data, err := sonic.ConfigFastest.Marshal(config)
+	err := s.bucket.Store(ctx, config.AppKey, string(config.Type), config)
 	if err != nil {
-		slog.Error("marshal channel config error.", "appKey", appKey, "channelType", channelType, "config", config, "error", err)
-		return fmt.Errorf("marshal channel config. %w", err)
-	}
-	bucket := s.newBucket(appKey)
-	resp := s.rds.HSet(ctx, bucket, string(channelType), string(data))
-	if err := resp.Err(); err != nil {
-		slog.Error("redis store channel config error.", "appKey", appKey, "channelType", channelType, "error", err)
-		return fmt.Errorf("store channel config. %w", err)
+		slog.Error("redis store channel config error.", "appKey", config.AppKey, "channelType", config.Type, "error", err)
+		return err
 	}
 	return nil
 }
 
-func (s *ChannelConfigService) Load(ctx context.Context, channelType core.ChannelType, appKey string) (*core.ChannelConfig, error) {
-	bucket := s.newBucket(appKey)
-	resp := s.rds.HGet(ctx, bucket, string(channelType))
-	if err := resp.Err(); err != nil {
-		if err == redis.Nil {
-			return nil, nil
-		}
-		slog.Error("redis load channel config bucket error.", "appKey", appKey, "channelType", channelType, "error", resp.Err())
-		return nil, fmt.Errorf("load channel entity %w", resp.Err())
+func (s *ChannelConfigService) Load(ctx context.Context, appKey string, channelType core.ChannelType) (*core.ChannelConfig, error) {
+	value, err := s.bucket.Load(ctx, appKey, string(channelType))
+	if err != nil {
+		slog.Error("redis load channel config error.", "appKey", appKey, "channelType", channelType, "error", err)
+		return nil, err
 	}
-	if resp.Val() != "" {
-		var config = &core.ChannelConfig{}
-		err := sonic.ConfigFastest.Unmarshal([]byte(resp.Val()), config)
-		if err != nil {
-			slog.Error("unmarshal channel config error.", "appKey", appKey, "value", resp.Val(), "error", resp.Err())
-			return nil, fmt.Errorf("unmarahsl channel config. %w", err)
-		}
-		return config, nil
-	}
-	return nil, nil
+	return value, nil
 }
 
-func (s *ChannelConfigService) Exists(ctx context.Context, channelType core.ChannelType, appKey string) bool {
-	bucket := s.newBucket(appKey)
-	ret := s.rds.HExists(ctx, bucket, string(channelType))
-	if ret.Err() != nil {
-		slog.Error("redis channel config exists error.", "appKey", appKey, "channelType", channelType, "error", ret.Err())
+func (s *ChannelConfigService) Exists(ctx context.Context, appKey string, channelType core.ChannelType) bool {
+	exists, err := s.bucket.Exists(ctx, appKey, string(channelType))
+	if err != nil {
+		slog.Error("redis exists channel config error.", "appKey", appKey, "channelType", channelType, "error", err)
 		return false
 	}
-	return ret.Val()
-}
-
-func (s *ChannelConfigService) newBucket(appKey string) string {
-	return fmt.Sprintf("onepush::core::channels::%s", appKey)
+	return exists
 }
